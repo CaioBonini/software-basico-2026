@@ -1,0 +1,47 @@
+Exemplo oficial do slide Aula7.pdf ("Algoritmo de Ligação"), conferido
+manualmente linha a linha nesta sessao. Ligando mod_a.asm (BEGIN) + mod_b.asm:
+
+Modulo A ocupa enderecos 0-11 (fator de correcao = 0)
+Modulo B ocupa enderecos 12-22 (fator de correcao = 12, por ser o tamanho do modulo A)
+
+TGD (Tabela Global de Definicoes) esperada:
+  L1     = 10 + 0  = 10
+  VAL    = 11 + 0  = 11
+  MOD_B  = 0  + 12 = 12
+  Y      = 8  + 12 = 20
+
+Codigo objeto final esperado (./ligador mod_a.asm mod_b.asm), uma linha,
+espaco entre numeros, SPACE = 0:
+
+12 20 10 11 1 20 11 22 7 12 14 5 13 20 13 11 13 22 5 10 0 0 0
+
+Detalhamento posicao a posicao:
+  end 00  12        INPUT opcode
+  end 01  20        operando: Y (externo, resolvido via TGD)
+  end 02  10        LOAD opcode
+  end 03  11        operando: VAL (local a modulo A, fator 0, sem mudanca)
+  end 04  1         ADD opcode
+  end 05  20        operando: Y (externo, resolvido via TGD)
+  end 06  11        STORE opcode
+  end 07  22        operando: Y + 2 -> TGD[Y](20) + deslocamento gravado(2) = 22
+  end 08  7         JMPP opcode
+  end 09  12        operando: MOD_B (externo, resolvido via TGD)
+  end 10  14        STOP
+  end 11  5         VAL: CONST 5 (valor literal, nao mexe)
+  end 12  13        OUTPUT opcode (modulo B, fator 12)
+  end 13  20        operando: Y (local a modulo B -> 8 + fator(12) = 20)
+  end 14  13        OUTPUT opcode
+  end 15  11        operando: VAL (externo, resolvido via TGD)
+  end 16  13        OUTPUT opcode
+  end 17  22        operando: Y + 2 (local -> (8+2) + fator(12) = 22)
+  end 18  5         JMP opcode
+  end 19  10        operando: L1 (externo, resolvido via TGD)
+  end 20  0         Y: SPACE 3 (palavra 1)
+  end 21  0         Y: SPACE 3 (palavra 2)
+  end 22  0         Y: SPACE 3 (palavra 3)
+
+Nota: a ordem/qual modulo fica em qual enderecos (quem vem primeiro) deve
+seguir a ordem dos argumentos na linha de comando do ligador (aqui,
+mod_a.asm primeiro). Se seu professor usar outro criterio (ex. sempre
+comecar pelo modulo com BEGIN), ajuste -- aqui BEGIN e mod_a mesmo, entao
+nao da pra distinguir os dois criterios com este exemplo sozinho.

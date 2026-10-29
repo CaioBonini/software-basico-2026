@@ -1,0 +1,12 @@
+Exemplo de referencia fornecido pelo professor para o OBJ intermediario (pre-ligacao)
+do modulo MOD1 acima. O formato do OBJ intermediario do montador (quando chamado
+pelo ligador) e LIVRE segundo o enunciado -- isto aqui e so UM exemplo possivel,
+nao uma obrigacao de formato. Guardamos para referencia de projeto.
+
+D, L2 7
+D, OLD_DATA 8
+D, NEW_DATA 9
+D, TEMP_DATA 10
+U, MOD2 5
+R, 0 1 0 1 0 1 0 0 0
+12 8 10 8 5 0 14 2 0 0 0
