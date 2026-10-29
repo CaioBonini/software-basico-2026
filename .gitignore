@@ -14,3 +14,7 @@ ligador
 # Editor/OS
 .vscode/
 .DS_Store
+
+# Contexto local do Claude Code (não versionar)
+CLAUDE.md
+PROMPT_INICIAL.md
