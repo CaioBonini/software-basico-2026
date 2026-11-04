@@ -24,6 +24,7 @@ typedef struct {
     int value;    /* endereço; só válido se defined */
     bool defined; /* coluna Def */
     int list;     /* coluna Lista: cabeça da cadeia em code, ou LIST_END */
+    bool external; /* EXTERN no modo ligador: valor 0, resolvido pelo ligador */
 } Symbol;
 
 typedef struct {

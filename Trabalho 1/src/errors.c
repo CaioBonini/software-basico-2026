@@ -41,6 +41,12 @@ void report_error(ErrorList *errors, int line, ErrorType type,
 
 void errors_print(const ErrorList *errors, FILE *out)
 {
+    errors_print_prefixed(errors, "", out);
+}
+
+void errors_print_prefixed(const ErrorList *errors, const char *prefix,
+                           FILE *out)
+{
     /* Ordenação por inserção pela linha: estável e a lista é pequena. */
     size_t n = errors->count;
     const Error **sorted = malloc((n ? n : 1) * sizeof *sorted);
@@ -57,11 +63,12 @@ void errors_print(const ErrorList *errors, FILE *out)
     }
     for (size_t i = 0; i < n; i++) {
         if (sorted[i]->line > 0)
-            fprintf(out, "Linha %d: erro %s: %s\n", sorted[i]->line,
-                    error_type_name(sorted[i]->type), sorted[i]->message);
-        else
-            fprintf(out, "Erro %s: %s\n", error_type_name(sorted[i]->type),
+            fprintf(out, "%sLinha %d: erro %s: %s\n", prefix,
+                    sorted[i]->line, error_type_name(sorted[i]->type),
                     sorted[i]->message);
+        else
+            fprintf(out, "%sErro %s: %s\n", prefix,
+                    error_type_name(sorted[i]->type), sorted[i]->message);
     }
     free(sorted);
 }

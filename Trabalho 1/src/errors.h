@@ -43,4 +43,8 @@ const char *error_type_name(ErrorType type);
  * inteiro (linha 0, ex.: seção TEXT ausente) saem sem número de linha. */
 void errors_print(const ErrorList *errors, FILE *out);
 
+/* Igual a errors_print, com prefix (ex.: "mod_a.asm: ") antes de cada erro. */
+void errors_print_prefixed(const ErrorList *errors, const char *prefix,
+                           FILE *out);
+
 #endif

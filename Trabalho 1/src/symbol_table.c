@@ -42,6 +42,7 @@ static Symbol *insert(SymbolTable *table, const char *name)
     sym->value = 0;
     sym->defined = false;
     sym->list = LIST_END;
+    sym->external = false;
     return sym;
 }
 

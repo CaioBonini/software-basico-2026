@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-# Testes do montador.
+# Testes do montador e do ligador.
 #
 # 1. Roda o montador em cada .asm de tests/ (exceto tests/com_ligacao/, que
 #    usa BEGIN/EXTERN e é testado pelo ligador) e compara o .obj gerado com o
 #    .obj.esperado ao lado, quando existir (token a token, ignorando espaços).
-# 2. Roda o tools/simulador nos .obj gerados com uma entrada fixa (casos
+# 2. Roda o ligador nos casos de linker_cases e compara o executável com a
+#    linha de números do .lig.esperado.
+# 3. Roda o tools/simulador nos .obj/.lig gerados com uma entrada fixa (casos
 #    definidos em simulator_cases, abaixo) e confere a saída.
 #
 # Uso: tests/run_tests.sh   (a partir de qualquer diretório)
-# MONTADOR=caminho permite trocar o binário testado.
+# MONTADOR=caminho e LIGADOR=caminho permitem trocar os binários testados.
 
 cd "$(dirname "$0")/.." || exit 2
 
 MONTADOR=${MONTADOR:-./montador}
+LIGADOR=${LIGADOR:-./ligador}
 SIMULADOR=./tools/simulador
 SIM_TIMEOUT=5
 
@@ -87,20 +90,75 @@ run_sim() {
     fi
 }
 
+# link_case <arquivo .lig.esperado> <mod1.asm> <mod2.asm> [mod3.asm]
+# O executável sai com o nome do primeiro módulo; o .esperado pode ter texto
+# explicativo, e só a linha formada apenas por números é comparada.
+link_case() {
+    local expected_file=$1
+    shift
+    local lig=${1%.asm}.lig
+    local name="ligador $*"
+    local out
+
+    rm -f "$lig"
+    out=$("$LIGADOR" "$@" 2>&1)
+    local status=$?
+    if [ ! -s "$lig" ]; then
+        fail "$name: $lig vazio ou não gerado (ligador saiu com $status)"
+        [ -n "$out" ] && echo "$out" | sed 's/^/          /'
+        return
+    fi
+    local expected
+    expected=$(grep -E '^-?[0-9]+( -?[0-9]+)*$' "$expected_file")
+    if compare_tokens "$(cat "$lig")" "$expected"; then
+        pass "$name"
+    else
+        fail "$name: $lig difere de $expected_file (< obtido, > esperado)"
+        show_diff
+    fi
+}
+
+# link_must_fail <descrição> <args...>: o ligador tem que sair com erro.
+link_must_fail() {
+    local name="ligador recusa $1"
+    shift
+    if "$LIGADOR" "$@" >/dev/null 2>&1; then
+        fail "$name: saiu com 0"
+    else
+        pass "$name"
+    fi
+}
+
+linker_cases() {
+    local d=tests/com_ligacao
+    link_case $d/mod_a_mod_b.lig.esperado $d/mod_a.asm $d/mod_b.asm
+    # Roda já, antes que os casos de falha abaixo sobrescrevam mod_a.lig.
+    run_sim $d/mod_a.lig "7" "7 5 12"
+    link_must_fail "mais de 3 modulos" \
+        $d/mod_a.asm $d/mod_b.asm $d/mod_a.asm $d/mod_b.asm
+    link_must_fail "EXTERN nao resolvido (mod_a sozinho com mod1)" \
+        $d/mod_a.asm $d/mod1.asm
+}
+
 # Casos funcionais: um run_sim por linha.
 simulator_cases() {
     run_sim tests/sem_ligacao/old_data.obj "13" "1 0 1 1"
 }
 
-if [ ! -x "$MONTADOR" ]; then
-    echo "erro: $MONTADOR não encontrado (rode make antes)" >&2
-    exit 2
-fi
+for bin in "$MONTADOR" "$LIGADOR"; do
+    if [ ! -x "$bin" ]; then
+        echo "erro: $bin não encontrado (rode make antes)" >&2
+        exit 2
+    fi
+done
 
 echo "== Montagem =="
 while IFS= read -r asm; do
     assemble_case "$asm"
 done < <(find tests -name '*.asm' -not -path 'tests/com_ligacao/*' | sort)
+
+echo "== Ligacao =="
+linker_cases
 
 echo "== Simulador =="
 simulator_cases

@@ -33,11 +33,23 @@ typedef struct {
     int offset; /* posição dentro da seção de dados */
 } DataLabel;
 
+/* PUBLIC pendente: o valor só é conhecido no fim da passagem. */
 typedef struct {
-    IntVec text;        /* código da seção de texto */
-    IntVec text_offset; /* pending_offset da symbol_table, paralelo a text */
-    IntVec text_line;   /* linha original de cada palavra de text */
-    IntVec data;        /* valores da seção de dados */
+    char name[IDENT_MAX_LEN + 1];
+    int line;
+} Public;
+
+typedef struct {
+    bool linker_mode;
+    IntVec text;          /* código da seção de texto */
+    IntVec text_offset;   /* pending_offset da symbol_table, paralelo a text */
+    IntVec text_line;     /* linha original de cada palavra de text */
+    IntVec text_relative; /* 1 se a palavra é operando de endereço */
+    IntVec data;          /* valores da seção de dados */
+    Use *uses; /* TU */
+    size_t n_uses, uses_capacity;
+    Public *publics;
+    size_t n_publics, publics_capacity;
     SymbolTable symbols;
     Equ *equs;
     size_t n_equs, equs_capacity;
@@ -76,7 +88,16 @@ static int emit_text(Assembler *as, int value, int line)
     vec_push(&as->text, value);
     vec_push(&as->text_offset, 0);
     vec_push(&as->text_line, line);
+    vec_push(&as->text_relative, 0);
     return (int)as->text.count - 1;
+}
+
+static void add_use(Assembler *as, const char *name, int pos)
+{
+    as->uses = grow(as->uses, &as->uses_capacity, as->n_uses, sizeof *as->uses);
+    strcpy(as->uses[as->n_uses].name, name);
+    as->uses[as->n_uses].position = pos;
+    as->n_uses++;
 }
 
 static const Equ *find_equ(const Assembler *as, const char *name)
@@ -171,11 +192,57 @@ static void emit_address(Assembler *as, const Operand *op, int line)
     }
     const Equ *equ = find_equ(as, op->name);
     if (equ != NULL) {
-        as->text.items[pos] = equ->value + op->value;
+        as->text.items[pos] = equ->value + op->value; /* valor, não endereço */
+        return;
+    }
+    as->text_relative.items[pos] = 1;
+    const Symbol *sym = symtab_find(&as->symbols, op->name);
+    if (sym != NULL && sym->external) {
+        as->text.items[pos] = op->value; /* 0 + deslocamento */
+        add_use(as, op->name, pos);
         return;
     }
     symtab_reference(&as->symbols, op->name, op->value, pos, as->text.items,
                      as->text_offset.items);
+}
+
+/* EXTERN no modo ligador: o símbolo entra na TS com valor 0, marcado como
+ * externo. Usos anteriores (ainda na cadeia de pendências) vão para a TU. */
+static void declare_extern(Assembler *as, const char *name, int line)
+{
+    if (is_declared(as, name)) {
+        report_error(as->errors, line, ERR_SEMANTICO,
+                     "rotulo '%s' declarado mais de uma vez", name);
+        return;
+    }
+    const Symbol *sym = symtab_find(&as->symbols, name);
+    for (int pos = sym ? sym->list : LIST_END; pos != LIST_END;
+         pos = as->text.items[pos])
+        add_use(as, name, pos);
+    symtab_define(&as->symbols, name, 0, as->text.items,
+                  as->text_offset.items);
+    symtab_find(&as->symbols, name)->external = true;
+}
+
+static void declare_public(Assembler *as, const Line *l)
+{
+    const Operand *op = &l->operands[0];
+    if (op->kind != OPERAND_SYMBOL || op->value != 0) {
+        report_error(as->errors, l->line, ERR_SINTATICO,
+                     "PUBLIC espera o nome de um rotulo");
+        return;
+    }
+    for (size_t i = 0; i < as->n_publics; i++)
+        if (strcmp(as->publics[i].name, op->name) == 0) {
+            report_error(as->errors, l->line, ERR_SEMANTICO,
+                         "'%s' declarado PUBLIC mais de uma vez", op->name);
+            return;
+        }
+    as->publics = grow(as->publics, &as->publics_capacity, as->n_publics,
+                       sizeof *as->publics);
+    strcpy(as->publics[as->n_publics].name, op->name);
+    as->publics[as->n_publics].line = l->line;
+    as->n_publics++;
 }
 
 static void do_instruction(Assembler *as, const Line *l, const Instruction *ins)
@@ -341,12 +408,15 @@ static void do_line(Assembler *as, const Line *l, bool *skip_next)
             report_error(as->errors, l->line, ERR_SEMANTICO, "END sem BEGIN");
         as->seen_end = true;
     } else if (strcmp(l->op, "PUBLIC") == 0) {
-        check_count(as, l, 1, 1);
+        if (check_count(as, l, 1, 1) && as->linker_mode)
+            declare_public(as, l);
     } else if (is_extern) {
         check_count(as, l, 0, 0);
         if (!l->has_label)
             report_error(as->errors, l->line, ERR_SINTATICO,
                          "EXTERN sem rotulo");
+        else if (as->linker_mode)
+            declare_extern(as, l->label, l->label_line);
     } else {
         report_error(as->errors, l->line, ERR_SINTATICO,
                      "instrucao ou diretiva invalida '%s'", l->op);
@@ -383,11 +453,44 @@ static void finish(Assembler *as)
     if (as->begin_line != 0 && !as->seen_end)
         report_error(as->errors, as->begin_line, ERR_SEMANTICO,
                      "BEGIN sem END");
+    if (as->linker_mode && as->begin_line == 0)
+        report_error(as->errors, 0, ERR_SEMANTICO,
+                     "modulo sem BEGIN (obrigatorio para o ligador)");
 }
 
-void assemble(const char *source, ObjectCode *out, ErrorList *errors)
+/* TD: cada PUBLIC recebe o valor que o símbolo tem na TS no fim da passagem. */
+static void build_definitions(Assembler *as, ObjectCode *out)
+{
+    out->defs = malloc((as->n_publics ? as->n_publics : 1) * sizeof *out->defs);
+    if (out->defs == NULL) {
+        fprintf(stderr, "erro: memoria insuficiente\n");
+        exit(1);
+    }
+    out->n_defs = 0;
+    for (size_t i = 0; i < as->n_publics; i++) {
+        const Public *pub = &as->publics[i];
+        const Symbol *sym = symtab_find(&as->symbols, pub->name);
+        if (sym == NULL || !sym->defined) {
+            report_error(as->errors, pub->line, ERR_SEMANTICO,
+                         "simbolo PUBLIC '%s' nao definido no modulo",
+                         pub->name);
+        } else if (sym->external) {
+            report_error(as->errors, pub->line, ERR_SEMANTICO,
+                         "simbolo '%s' nao pode ser EXTERN e PUBLIC",
+                         pub->name);
+        } else {
+            strcpy(out->defs[out->n_defs].name, pub->name);
+            out->defs[out->n_defs].value = sym->value;
+            out->n_defs++;
+        }
+    }
+}
+
+static void assemble_mode(const char *source, bool linker_mode,
+                          ObjectCode *out, ErrorList *errors)
 {
     Assembler as = {0};
+    as.linker_mode = linker_mode;
     as.errors = errors;
     symtab_init(&as.symbols);
 
@@ -403,34 +506,59 @@ void assemble(const char *source, ObjectCode *out, ErrorList *errors)
         do_line(&as, &lines.items[i], &skip_next);
     }
     finish(&as);
+    build_definitions(&as, out);
 
     out->count = as.text.count + as.data.count;
-    out->words = malloc((out->count ? out->count : 1) * sizeof *out->words);
-    if (out->words == NULL) {
+    size_t n = out->count ? out->count : 1;
+    out->words = malloc(n * sizeof *out->words);
+    out->relative = calloc(n, sizeof *out->relative);
+    if (out->words == NULL || out->relative == NULL) {
         fprintf(stderr, "erro: memoria insuficiente\n");
         exit(1);
     }
-    if (as.text.count > 0)
-        memcpy(out->words, as.text.items, as.text.count * sizeof(int));
+    for (size_t i = 0; i < as.text.count; i++) {
+        out->words[i] = as.text.items[i];
+        out->relative[i] = (unsigned char)as.text_relative.items[i];
+    }
     if (as.data.count > 0)
         memcpy(out->words + as.text.count, as.data.items,
                as.data.count * sizeof(int));
+    out->uses = as.uses; /* posse passa para out */
+    out->n_uses = as.n_uses;
 
     lines_free(&lines);
     symtab_free(&as.symbols);
     free(as.text.items);
     free(as.text_offset.items);
     free(as.text_line.items);
+    free(as.text_relative.items);
     free(as.data.items);
     free(as.equs);
     free(as.data_labels);
+    free(as.publics);
+}
+
+void assemble(const char *source, ObjectCode *out, ErrorList *errors)
+{
+    assemble_mode(source, false, out, errors);
+}
+
+void assemble_module(const char *source, ObjectCode *out, ErrorList *errors)
+{
+    assemble_mode(source, true, out, errors);
 }
 
 void object_code_free(ObjectCode *code)
 {
     free(code->words);
+    free(code->relative);
+    free(code->defs);
+    free(code->uses);
     code->words = NULL;
-    code->count = 0;
+    code->relative = NULL;
+    code->defs = NULL;
+    code->uses = NULL;
+    code->count = code->n_defs = code->n_uses = 0;
 }
 
 char *read_source_file(const char *path)

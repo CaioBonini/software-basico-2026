@@ -2,7 +2,9 @@
 *.o
 *.obj
 !tests/**/*.obj.esperado
+*.lig
 *.out
+build/
 montador
 ligador
 !*/tools/simulador
