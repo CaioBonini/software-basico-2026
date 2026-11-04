@@ -1,11 +1,33 @@
-# Software Básico
+# Software Básico — 2026.2
 
-Repositório com os trabalhos práticos da disciplina de Software Básico.
+Trabalhos da disciplina de Software Básico da UnB, com o professor
+Bruno Machiavello, no segundo semestre de 2026.
 
-- **Trabalho 1** — Montador + Ligador de uma linguagem de montagem hipotética
-  (C, passagem única). 
-- **Trabalho 2** — (a definir)
+Feito por Caio Bonini Sampaio (matrícula 251004287).
 
-<!-- TODO: preencher com nome da universidade/disciplina (código da matéria),
-     nome do professor, semestre, e nomes/matrículas da dupla/grupo,
-     como no README do repositório de referência que inspirou esta estrutura. -->
+## Trabalho 1 — Montador e ligador
+
+Um montador e um ligador escritos em C para o assembly didático usado em
+aula: um acumulador, 14 instruções e o programa dividido em seção de texto
+e seção de dados. O montador lê o arquivo uma vez só e resolve os rótulos
+usados antes de serem declarados com backpatching.
+
+Ainda em andamento.
+
+Para compilar e rodar os testes, dentro de `Trabalho 1/`:
+
+```bash
+make        # gera ./montador e ./ligador
+make test   # testes unitários + comparação com os exemplos
+```
+
+Uso:
+
+```bash
+./montador programa.asm                 # gera programa.obj
+./ligador mod1.asm mod2.asm [mod3.asm]  # liga até 3 módulos
+```
+
+## Trabalho 2
+
+Ainda não começou.
