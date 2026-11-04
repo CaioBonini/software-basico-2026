@@ -16,7 +16,6 @@
 
 #define LINKER_MAX_MODULES 3
 #define LINKED_EXTENSION ".lig" /* extensão do executável (provisória) */
-#define MEMORY_SIZE 65536       /* palavras da máquina hipotética */
 
 /* Lê um objeto intermediário gravado por write_module_file. Devolve 0 se
  * deu certo, -1 se não abriu e -2 se o formato está errado. */

@@ -333,14 +333,17 @@ static void test_link_errors(void)
     object_code_free(&out);
     errors_free(&errors);
 
-    printf("ligador: endereco fora da memoria\n");
+    printf("ligador: endereco que so sai da memoria depois do fator\n");
+    /* No 2º módulo, X + 65532 = 65535 (cabe, o montador aceita); com o
+     * fator 1 do 1º módulo, vira 65536. */
     const char *far[] = {
-        "SECTION TEXT\nA: BEGIN\nLOAD X + 70000\nSTOP\nEND\n"
+        "SECTION TEXT\nA: BEGIN\nSTOP\nEND\n",
+        "SECTION TEXT\nB: BEGIN\nLOAD X + 65532\nSTOP\nEND\n"
         "SECTION DATA\nX: SPACE\n",
-        "SECTION TEXT\nB: BEGIN\nSTOP\nEND\n",
     };
     errors_init(&errors);
     CHECK(link_sources(far, 2, &out, &errors) == 1);
+    CHECK(errors.count == 1 && strstr(errors.items[0].message, "65536"));
     object_code_free(&out);
     errors_free(&errors);
 }

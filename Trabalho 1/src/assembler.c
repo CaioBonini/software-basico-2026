@@ -192,7 +192,13 @@ static void emit_address(Assembler *as, const Operand *op, int line)
     }
     const Equ *equ = find_equ(as, op->name);
     if (equ != NULL) {
-        as->text.items[pos] = equ->value + op->value; /* valor, não endereço */
+        /* Valor absoluto (não relocável), mas a instrução o usa como
+         * endereço: já dá para checar a faixa aqui. */
+        as->text.items[pos] = equ->value + op->value;
+        if (!address_in_memory(as->text.items[pos]))
+            report_error(as->errors, line, ERR_SEMANTICO,
+                         "endereco %d fora da memoria (0 a %d)",
+                         as->text.items[pos], MEMORY_SIZE - 1);
         return;
     }
     as->text_relative.items[pos] = 1;
@@ -448,6 +454,23 @@ static void finish(Assembler *as)
         sym->list = LIST_END;
     }
 
+    /* Endereços de rótulo só ficam conhecidos agora. Operandos externos
+     * guardam só o deslocamento: quem checa esses é o ligador. */
+    unsigned char *external = calloc(as->text.count ? as->text.count : 1, 1);
+    if (external == NULL) {
+        fprintf(stderr, "erro: memoria insuficiente\n");
+        exit(1);
+    }
+    for (size_t i = 0; i < as->n_uses; i++)
+        external[as->uses[i].position] = 1;
+    for (size_t pos = 0; pos < as->text.count; pos++)
+        if (as->text_relative.items[pos] && !external[pos] &&
+            !address_in_memory(as->text.items[pos]))
+            report_error(as->errors, as->text_line.items[pos], ERR_SEMANTICO,
+                         "endereco %d fora da memoria (0 a %d)",
+                         as->text.items[pos], MEMORY_SIZE - 1);
+    free(external);
+
     if (!as->seen_text)
         report_error(as->errors, 0, ERR_SEMANTICO, "secao TEXT ausente");
     if (as->begin_line != 0 && !as->seen_end)
@@ -536,6 +559,11 @@ static void assemble_mode(const char *source, bool linker_mode,
     free(as.equs);
     free(as.data_labels);
     free(as.publics);
+}
+
+bool address_in_memory(int address)
+{
+    return address >= 0 && address < MEMORY_SIZE;
 }
 
 void assemble(const char *source, ObjectCode *out, ErrorList *errors)

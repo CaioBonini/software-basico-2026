@@ -65,6 +65,48 @@ assemble_case() {
     fi
 }
 
+# Erros que o .asm declara esperar, um "LINHA TIPO" por linha:
+#   código...  ; ESPERADO: TIPO     -> erro TIPO naquela linha
+#   ; ESPERADO-GLOBAL: TIPO         -> erro TIPO sem linha (linha 0)
+expected_errors() {
+    grep -nE '^[^;].*; ESPERADO: (LEXICO|SINTATICO|SEMANTICO)' "$1" |
+        sed -E 's/^([0-9]+):.*; ESPERADO: ([A-Z]+).*/\1 \2/'
+    grep -E '^; ESPERADO-GLOBAL: ' "$1" |
+        sed -E 's/^; ESPERADO-GLOBAL: ([A-Z]+).*/0 \1/'
+}
+
+# Erros que o montador reportou, no mesmo formato "LINHA TIPO".
+reported_errors() {
+    sed -nE -e 's/^Linha ([0-9]+): erro ([A-Z]+):.*/\1 \2/p' \
+        -e 's/^Erro ([A-Z]+):.*/0 \1/p' <<< "$1"
+}
+
+# error_case <arquivo.asm>: o montador tem que acusar exatamente os erros
+# marcados no .asm, deixar o .obj vazio e sair com código != 0.
+error_case() {
+    local asm=$1
+    local obj=${asm%.asm}.obj
+    local out
+
+    rm -f "$obj"
+    out=$("$MONTADOR" "$asm" 2>&1)
+    local status=$?
+
+    diff_out=$(diff <(expected_errors "$asm" | sort -n) \
+                    <(reported_errors "$out" | sort -n))
+    if [ -n "$diff_out" ]; then
+        fail "$asm: erros diferentes dos marcados (< esperado, > obtido)"
+        show_diff
+        echo "$out" | sed 's/^/          | /'
+    elif [ $status -eq 0 ]; then
+        fail "$asm: montador saiu com 0 apesar dos erros"
+    elif [ ! -f "$obj" ] || [ -s "$obj" ]; then
+        fail "$asm: $obj deveria existir e estar vazio"
+    else
+        pass "$asm ($(expected_errors "$asm" | wc -l) erro(s) na linha e tipo certos)"
+    fi
+}
+
 # run_sim <arquivo.obj> <entrada> <saída esperada>
 # A entrada vai para o stdin do simulador; a saída é comparada em tokens.
 run_sim() {
@@ -129,6 +171,30 @@ link_must_fail() {
     fi
 }
 
+# link_error_case <trecho esperado na saída> <mod1.asm> ...: o ligador tem
+# que sair com erro, citar o trecho e não deixar executável com conteúdo.
+link_error_case() {
+    local expected=$1
+    shift
+    local lig=${1%.asm}.lig
+    local name="ligador $* -> \"$expected\""
+    local out
+
+    rm -f "$lig"
+    out=$("$LIGADOR" "$@" 2>&1)
+    local status=$?
+    if [ $status -eq 0 ]; then
+        fail "$name: saiu com 0"
+    elif ! grep -qF -- "$expected" <<< "$out"; then
+        fail "$name: mensagem nao encontrada"
+        echo "$out" | sed 's/^/          | /'
+    elif [ -s "$lig" ]; then
+        fail "$name: $lig deveria estar vazio"
+    else
+        pass "$name"
+    fi
+}
+
 linker_cases() {
     local d=tests/com_ligacao
     link_case $d/mod_a_mod_b.lig.esperado $d/mod_a.asm $d/mod_b.asm
@@ -138,11 +204,29 @@ linker_cases() {
         $d/mod_a.asm $d/mod_b.asm $d/mod_a.asm $d/mod_b.asm
     link_must_fail "EXTERN nao resolvido (mod_a sozinho com mod1)" \
         $d/mod_a.asm $d/mod1.asm
+
+    # Testes próprios (não oficiais), ver tests/proprios/LEIAME.md.
+    local p=tests/proprios/ligacao
+    link_error_case "no maximo 3 modulos (recebeu 4)" \
+        $p/ok_b.asm $p/ok_c.asm $p/ok_b.asm $p/ok_c.asm
+    link_error_case "Erro SEMANTICO: simbolo externo 'Z'" \
+        $p/externo_nao_resolvido.asm $p/ok_b.asm
+    link_error_case "Erro SEMANTICO: simbolo 'DUP' definido em mais de um modulo" \
+        $p/public_dup_a.asm $p/public_dup_b.asm
+    link_error_case "Erro SEMANTICO: endereco 65536 fora da memoria" \
+        $p/ok_b.asm $p/fora_da_faixa.asm
+    link_error_case "modulo_sem_begin.asm: Erro SEMANTICO: modulo sem BEGIN" \
+        $p/modulo_sem_begin.asm $p/ok_b.asm
+    link_error_case "public_indefinido.asm: Linha 6: erro SEMANTICO: simbolo PUBLIC 'NADA'" \
+        $p/public_indefinido.asm $p/ok_b.asm
 }
 
 # Casos funcionais: um run_sim por linha.
 simulator_cases() {
     run_sim tests/sem_ligacao/old_data.obj "13" "1 0 1 1"
+    # Testes próprios (não oficiais), ver tests/proprios/LEIAME.md.
+    run_sim tests/proprios/funcionais/space_bloco.obj "3 4" "7 0 99"
+    run_sim tests/proprios/funcionais/equ_if.obj "5" "5 10 3"
 }
 
 for bin in "$MONTADOR" "$LIGADOR"; do
@@ -154,8 +238,13 @@ done
 
 echo "== Montagem =="
 while IFS= read -r asm; do
-    assemble_case "$asm"
-done < <(find tests -name '*.asm' -not -path 'tests/com_ligacao/*' | sort)
+    if grep -qE '; ESPERADO(-GLOBAL)?: ' "$asm"; then
+        error_case "$asm"
+    else
+        assemble_case "$asm"
+    fi
+done < <(find tests -name '*.asm' -not -path 'tests/com_ligacao/*' \
+              -not -path 'tests/proprios/ligacao/*' | sort)
 
 echo "== Ligacao =="
 linker_cases

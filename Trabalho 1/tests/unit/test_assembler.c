@@ -224,6 +224,31 @@ static void test_errors(void)
     run("SECTION CODIGO\nSECTION TEXT\nSTOP\n");
     CHECK(single_error(ERR_SINTATICO, 1));
 
+    printf("montador: endereco fora da memoria (0 a 65535)\n");
+    /* Texto = LOAD (0 1) + STOP (2): X fica no endereço 3. */
+    run("SECTION TEXT\nLOAD X + 65532\nSTOP\nSECTION DATA\nX: SPACE\n");
+    CHECK(words_are("10 65535 14 0")); /* limite: ainda cabe */
+    run("SECTION TEXT\nLOAD X + 65533\nSTOP\nSECTION DATA\nX: SPACE\n");
+    CHECK(single_error(ERR_SEMANTICO, 2));
+    run("SECTION TEXT\nLOAD X + -4\nSTOP\nSECTION DATA\nX: SPACE\n");
+    CHECK(single_error(ERR_SEMANTICO, 2));
+    /* Rótulo definido depois do uso: checado no fim, na linha do uso. */
+    run("SECTION TEXT\nJMP L + 70000\nL: STOP\n");
+    CHECK(single_error(ERR_SEMANTICO, 2));
+    /* Valor de EQU usado como endereço também é checado. */
+    run("N: EQU 70000\nSECTION TEXT\nLOAD N\nSTOP\n");
+    CHECK(single_error(ERR_SEMANTICO, 3));
+    /* Operando externo guarda só o deslocamento: quem checa é o ligador. */
+    ErrorList module_errors;
+    errors_init(&module_errors);
+    ObjectCode module;
+    assemble_module("SECTION TEXT\nM: BEGIN\nY: EXTERN\nLOAD Y + 70000\n"
+                    "STOP\nEND\n",
+                    &module, &module_errors);
+    CHECK(module_errors.count == 0);
+    object_code_free(&module);
+    errors_free(&module_errors);
+
     printf("montador: rotulo sem instrucao\n");
     run("SECTION TEXT\nSTOP\nFIM:\nSECTION DATA\nX: SPACE\n");
     CHECK(single_error(ERR_SINTATICO, 3));

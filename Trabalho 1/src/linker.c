@@ -175,7 +175,7 @@ void link_modules(const ObjectCode *modules, const char *const *names, int n,
                 continue;
             if (!in_use_table[pos])
                 out->words[pos] += factor[i];
-            if (out->words[pos] < 0 || out->words[pos] >= MEMORY_SIZE)
+            if (!address_in_memory(out->words[pos]))
                 report_error(errors, 0, ERR_SEMANTICO,
                              "endereco %d fora da memoria (posicao %zu de %s)",
                              out->words[pos], p, names[i]);

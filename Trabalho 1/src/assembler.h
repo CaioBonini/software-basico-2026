@@ -10,10 +10,17 @@
 #ifndef ASSEMBLER_H
 #define ASSEMBLER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #include "errors.h"
 #include "symbol_table.h"
+
+#define MEMORY_SIZE 65536 /* palavras da máquina hipotética (2^16) */
+
+/* address cabe na memória (0 a MEMORY_SIZE - 1)? Usado pelo montador e
+ * pelo ligador. */
+bool address_in_memory(int address);
 
 /* Entrada da Tabela de Definições (TD): símbolo PUBLIC e seu endereço
  * local ao módulo. */
