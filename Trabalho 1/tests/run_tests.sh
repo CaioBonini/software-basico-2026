@@ -150,14 +150,64 @@ link_case() {
         [ -n "$out" ] && echo "$out" | sed 's/^/          /'
         return
     fi
+    # O ligador tem que ter criado o objeto intermediário de cada módulo.
+    local asm
+    for asm in "$@"; do
+        if ! grep -q '^R,' "${asm%.asm}.obj" 2>/dev/null; then
+            fail "$name: objeto intermediario ${asm%.asm}.obj nao criado"
+            return
+        fi
+    done
     local expected
     expected=$(grep -E '^-?[0-9]+( -?[0-9]+)*$' "$expected_file")
     if compare_tokens "$(cat "$lig")" "$expected"; then
-        pass "$name"
+        pass "$name (+ objetos intermediarios em disco)"
     else
         fail "$name: $lig difere de $expected_file (< obtido, > esperado)"
         show_diff
     fi
+}
+
+# cli_must_fail <descrição> <trecho esperado na saída>
+#               <arquivos que não podem ser criados ("" = nenhum)> <comando...>
+cli_must_fail() {
+    local name="linha de comando: $1" expected=$2 forbidden=$3
+    shift 3
+    local f
+    for f in $forbidden; do rm -f "$f"; done
+    local out
+    out=$("$@" 2>&1)
+    local status=$?
+    if [ $status -eq 0 ]; then
+        fail "$name: saiu com 0"
+        return
+    elif ! grep -qF -- "$expected" <<< "$out"; then
+        fail "$name: mensagem nao encontrada"
+        echo "$out" | sed 's/^/          | /'
+        return
+    fi
+    for f in $forbidden; do
+        if [ -e "$f" ]; then
+            fail "$name: $f nao deveria ter sido criado"
+            rm -f "$f"
+            return
+        fi
+    done
+    pass "$name${forbidden:+ (sem criar $forbidden)}"
+}
+
+cli_cases() {
+    local p=tests/proprios/ligacao
+    cli_must_fail "montador sem argumento" "uso:" "" "$MONTADOR"
+    cli_must_fail "montador com 2 argumentos" "uso:" "" \
+        "$MONTADOR" $p/ok_b.asm $p/ok_c.asm
+    cli_must_fail "montador com arquivo inexistente" "nao foi possivel ler" \
+        "tests/nao_existe.obj" "$MONTADOR" tests/nao_existe.asm
+    cli_must_fail "ligador com 1 modulo" "uso:" "" "$LIGADOR" $p/ok_b.asm
+    # Nenhum arquivo: nem o executável, nem o objeto do módulo que existe.
+    cli_must_fail "ligador com arquivo inexistente" "nao foi possivel ler" \
+        "tests/nao_existe.lig tests/nao_existe.obj $p/ok_b.obj" \
+        "$LIGADOR" tests/nao_existe.asm $p/ok_b.asm
 }
 
 # link_must_fail <descrição> <args...>: o ligador tem que sair com erro.
@@ -207,6 +257,8 @@ linker_cases() {
 
     # Testes próprios (não oficiais), ver tests/proprios/LEIAME.md.
     local p=tests/proprios/ligacao
+    link_case $p/minusc_a_minusc_b.lig.esperado $p/minusc_a.asm $p/minusc_b.asm
+    run_sim $p/minusc_a.lig "21" "42"
     link_error_case "no maximo 3 modulos (recebeu 4)" \
         $p/ok_b.asm $p/ok_c.asm $p/ok_b.asm $p/ok_c.asm
     link_error_case "Erro SEMANTICO: simbolo externo 'Z'" \
@@ -227,6 +279,10 @@ simulator_cases() {
     # Testes próprios (não oficiais), ver tests/proprios/LEIAME.md.
     run_sim tests/proprios/funcionais/space_bloco.obj "3 4" "7 0 99"
     run_sim tests/proprios/funcionais/equ_if.obj "5" "5 10 3"
+    run_sim tests/proprios/funcionais/bom.obj "9" "9"
+    run_sim tests/proprios/funcionais/minusculas_crlf.obj "10" "6 -4"
+    run_sim tests/proprios/funcionais/dados_primeiro.obj "10" "3 -7"
+    run_sim tests/proprios/funcionais/equ_encadeado.obj "" "2 3"
 }
 
 for bin in "$MONTADOR" "$LIGADOR"; do
@@ -251,6 +307,9 @@ linker_cases
 
 echo "== Simulador =="
 simulator_cases
+
+echo "== Linha de comando =="
+cli_cases
 
 echo
 echo "$passed passaram, $failed falharam"

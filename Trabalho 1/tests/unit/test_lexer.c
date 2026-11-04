@@ -103,6 +103,15 @@ static void test_spacing(void)
     /* Arquivo sem '\n' no fim. */
     lex("STOP");
     CHECK(lines.count == 1 && line_is(0, "STOP", 1));
+    /* BOM UTF-8 no início (editores do Windows) é ignorado. */
+    lex("\xEF\xBB\xBFSECTION TEXT\nSTOP\n");
+    CHECK(errors.count == 0 && lines.count == 2 &&
+          line_is(0, "SECTION TEXT", 1) && line_is(1, "STOP", 2));
+    lex("\xEF\xBB\xBF");
+    CHECK(errors.count == 0 && lines.count == 0);
+    /* Só no início: no meio do arquivo continua sendo caractere inválido. */
+    lex("STOP\n\xEF\xBB\xBFSTOP\n");
+    CHECK(single_error(ERR_LEXICO, 2));
 }
 
 static void test_sections(void)
@@ -239,6 +248,12 @@ static void test_lexical_errors(void)
     CHECK(single_error(ERR_LEXICO, 1));
     CHECK(line_is(0, "ADD X", 1) && !lines.items[0].has_label &&
           lines.items[0].has_error);
+    /* Só dígitos: mesma regra de identificador, mesmo tipo de erro. */
+    lex("123: STOP\n");
+    CHECK(single_error(ERR_LEXICO, 1));
+    CHECK(line_is(0, "STOP", 1) && !lines.items[0].has_label);
+    lex("SECTION TEXT\n123:\nSTOP\n"); /* rótulo sozinho na linha */
+    CHECK(single_error(ERR_LEXICO, 2));
     lex("SECTION TEXT\nADD X$\n");
     CHECK(single_error(ERR_LEXICO, 2) && lines.items[1].has_error);
     lex("COPY A,B\n"); /* COPY é sem vírgula */

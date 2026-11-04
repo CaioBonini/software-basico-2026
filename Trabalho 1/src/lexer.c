@@ -97,6 +97,10 @@ static int tokenize(const char *p, const char *end, int line, Token *tokens,
                     tok.kind = TOK_INVALID;
                 } else {
                     tok.kind = TOK_NUMBER;
+                    /* texto guardado só para mensagens (ex.: "123:") */
+                    int n_chars = len < IDENT_MAX_LEN ? len : IDENT_MAX_LEN;
+                    memcpy(tok.text, start, (size_t)n_chars);
+                    tok.text[n_chars] = '\0';
                 }
             } else if (len > IDENT_MAX_LEN) {
                 report_error(errors, line, ERR_LEXICO,
@@ -141,11 +145,18 @@ static void parse_tokens(const Token *tokens, int n, int line, Line *out,
                          ErrorList *errors)
 {
     int i = 0;
-    while (i + 1 < n &&
-           (tokens[i].kind == TOK_IDENT || tokens[i].kind == TOK_INVALID) &&
-           tokens[i + 1].kind == TOK_COLON) {
+    while (i + 1 < n && tokens[i].kind != TOK_COLON &&
+           tokens[i].kind != TOK_PLUS && tokens[i + 1].kind == TOK_COLON) {
         if (tokens[i].kind == TOK_INVALID) {
             /* rótulo malformado: já reportado, só consome "X:" */
+        } else if (tokens[i].kind == TOK_NUMBER) {
+            /* "123:" é um número bem formado, mas como rótulo viola a mesma
+             * regra de identificador que "1ABC:" */
+            report_error(errors, line, ERR_LEXICO,
+                         "rotulo invalido '%s' (identificador nao pode "
+                         "comecar com digito)",
+                         tokens[i].text);
+            out->has_error = true;
         } else if (out->has_label) {
             report_error(errors, line, ERR_SINTATICO,
                          "mais de um rotulo na mesma linha ('%s' e '%s')",
@@ -255,6 +266,10 @@ void lexer_run(const char *source, LineList *lines, ErrorList *errors)
     bool has_pending = false;
     int line_no = 0;
     const char *p = source;
+    /* BOM UTF-8 (EF BB BF), gravado por alguns editores do Windows no
+     * início do arquivo: não é conteúdo, só marca a codificação. */
+    if (strncmp(p, "\xEF\xBB\xBF", 3) == 0)
+        p += 3;
 
     while (*p != '\0') {
         const char *end = strchr(p, '\n');

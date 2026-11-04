@@ -2,6 +2,7 @@
  *
  * lexer_run() lê o fonte inteiro (já em memória) e gera uma linha lógica por
  * instrução/diretiva, já estruturada em rótulo / operação / operandos:
+ *   - um BOM UTF-8 no início do arquivo é ignorado;
  *   - comentários (';' até o fim da linha) e linhas em branco somem;
  *   - espaços, tabs e '\r' são só separadores (':' e '+' também separam,
  *     então "L1:DIV" == "L1 : DIV" e "Y+2" == "Y + 2");

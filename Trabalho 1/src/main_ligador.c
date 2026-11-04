@@ -2,7 +2,8 @@
  *
  * Monta cada módulo no modo ligador, grava o objeto intermediário de cada
  * um (a.obj, b.obj, ...), lê esses objetos de volta e liga, gerando o
- * executável com o nome do primeiro módulo e extensão LINKED_EXTENSION. */
+ * executável com o nome do primeiro módulo e extensão LINKED_EXTENSION.
+ * Se algum .asm não abre, nada é gravado. */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -11,14 +12,10 @@
 #include "linker.h"
 #include "object_writer.h"
 
-/* Monta path e grava seu objeto intermediário. Devolve 0 se não houve erro. */
-static int assemble_to_file(const char *path)
+/* Monta source (lido de path) e grava seu objeto intermediário. Devolve 0
+ * se não houve erro. */
+static int assemble_to_file(const char *path, const char *source)
 {
-    char *source = read_source_file(path);
-    if (source == NULL) {
-        fprintf(stderr, "ligador: nao foi possivel ler '%s'\n", path);
-        return 1;
-    }
     ErrorList errors;
     errors_init(&errors);
     ObjectCode module;
@@ -40,7 +37,6 @@ static int assemble_to_file(const char *path)
     free(obj_path);
     object_code_free(&module);
     errors_free(&errors);
-    free(source);
     return failed;
 }
 
@@ -58,9 +54,28 @@ int main(int argc, char **argv)
     }
     const char *const *names = (const char *const *)&argv[1];
 
+    /* Lê todas as entradas antes de gravar qualquer coisa: se alguma não
+     * abre, sai sem criar arquivo nenhum (como o montador). */
+    char *sources[LINKER_MAX_MODULES] = {0};
+    int unreadable = 0;
+    for (int i = 0; i < n; i++) {
+        sources[i] = read_source_file(names[i]);
+        if (sources[i] == NULL) {
+            fprintf(stderr, "ligador: nao foi possivel ler '%s'\n", names[i]);
+            unreadable = 1;
+        }
+    }
+    if (unreadable) {
+        for (int i = 0; i < n; i++)
+            free(sources[i]);
+        return 1;
+    }
+
     int failed = 0;
-    for (int i = 0; i < n; i++)
-        failed |= assemble_to_file(names[i]);
+    for (int i = 0; i < n; i++) {
+        failed |= assemble_to_file(names[i], sources[i]);
+        free(sources[i]);
+    }
 
     ObjectCode modules[LINKER_MAX_MODULES] = {0};
     for (int i = 0; i < n && !failed; i++) {
