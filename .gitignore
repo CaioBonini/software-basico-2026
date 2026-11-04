@@ -15,6 +15,6 @@ ligador
 .vscode/
 .DS_Store
 
-# Contexto local do Claude Code (não versionar)
+# Arquivos locais (não versionar)
 CLAUDE.md
 PROMPT_INICIAL.md

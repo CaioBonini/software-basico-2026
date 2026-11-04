@@ -1,6 +1,6 @@
 /* Tabela de símbolos (Símbolo | Valor | Def | Lista) com lista de backpatch.
  *
- * Implementa o algoritmo de passagem única da seção 4.1 do CLAUDE.md: a lista
+ * Implementa o algoritmo de uma passagem dos slides da Aula 5: a lista
  * de referências pendentes de um símbolo é uma cadeia de índices guardada no
  * próprio vetor de código objeto (code[pos] = próxima posição da cadeia),
  * terminada em -1, com a cabeça na coluna Lista.
