@@ -6,6 +6,7 @@
 #define ERRORS_H
 
 #include <stddef.h>
+#include <stdio.h>
 
 /* Os 6 erros do enunciado, classificados como na Aula 3. */
 typedef enum {
@@ -36,5 +37,10 @@ void report_error(ErrorList *errors, int line, ErrorType type,
     __attribute__((format(printf, 4, 5)));
 
 const char *error_type_name(ErrorType type);
+
+/* Imprime os erros em ordem de linha (estável), um por linha:
+ * "Linha 12: erro SEMANTICO: rotulo 'X' nao declarado". Erros do programa
+ * inteiro (linha 0, ex.: seção TEXT ausente) saem sem número de linha. */
+void errors_print(const ErrorList *errors, FILE *out);
 
 #endif

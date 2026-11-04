@@ -24,7 +24,7 @@ $(BUILD):
 	mkdir -p $@
 
 # Testes unitários isolados (tests/unit/), sem lexer/montador
-UNIT_TESTS = $(BUILD)/test_tables $(BUILD)/test_lexer
+UNIT_TESTS = $(BUILD)/test_tables $(BUILD)/test_lexer $(BUILD)/test_assembler
 
 $(BUILD)/test_tables: tests/unit/test_tables.c $(BUILD)/opcode_table.o $(BUILD)/symbol_table.o | $(BUILD)
 	$(CC) $(CFLAGS) -I$(SRC) -o $@ $^
@@ -32,6 +32,8 @@ $(BUILD)/test_tables: tests/unit/test_tables.c $(BUILD)/opcode_table.o $(BUILD)/
 $(BUILD)/test_lexer: tests/unit/test_lexer.c $(BUILD)/lexer.o $(BUILD)/errors.o | $(BUILD)
 	$(CC) $(CFLAGS) -I$(SRC) -o $@ $^
 
+$(BUILD)/test_assembler: tests/unit/test_assembler.c $(COMMON_OBJS) | $(BUILD)
+	$(CC) $(CFLAGS) -I$(SRC) -o $@ $^
 
 unit: $(UNIT_TESTS)
 	@for t in $(UNIT_TESTS); do ./$$t || exit 1; done
