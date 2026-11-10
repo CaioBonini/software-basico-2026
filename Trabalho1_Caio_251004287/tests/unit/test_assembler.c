@@ -1,5 +1,5 @@
 /* Testes isolados do montador (assemble) e do object_writer.
- * Uso: make unit (roda a partir de Trabalho 1/, por causa dos .asm reais) */
+ * Uso: make unit (roda a partir de Trabalho1_Caio_251004287/, por causa dos .asm reais) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

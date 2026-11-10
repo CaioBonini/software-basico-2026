@@ -12,9 +12,9 @@ aula: um acumulador, 14 instruções e o programa dividido em seção de texto
 e seção de dados. O montador lê o arquivo uma vez só e resolve os rótulos
 usados antes de serem declarados com backpatching.
 
-Ainda em andamento.
+Entrega: pasta `Trabalho1_Caio_251004287/` (tem um README próprio com instruções de teste).
 
-Para compilar e rodar os testes, dentro de `Trabalho 1/`:
+Para compilar e rodar os testes, dentro de `Trabalho1_Caio_251004287/`:
 
 ```bash
 make        # gera ./montador e ./ligador
