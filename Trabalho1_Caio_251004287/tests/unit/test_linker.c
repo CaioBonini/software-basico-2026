@@ -1,5 +1,5 @@
 /* Testes isolados do modo ligador do montador e do ligador.
- * Uso: make unit (roda a partir de Trabalho 1/, por causa dos .asm reais) */
+ * Uso: make unit (roda a partir de Trabalho1_Caio_251004287/, por causa dos .asm reais) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
